@@ -1,0 +1,17 @@
+{
+  "skill": "lint",
+  "should_trigger": [
+    "/skillbench:lint .",
+    "check my skills before I publish this plugin",
+    "skill'imi kontrol et, bir yerde hata var mı",
+    "why does this skill never activate? review how it is written",
+    "lint the SKILL.md files in this repo",
+    "bu plugin'i yayınlamadan önce gözden geçir"
+  ],
+  "should_not_trigger": [
+    "which of my skills are actually being used?",
+    "these two skills keep competing, which one wins?",
+    "write me a new skill for deploying the app",
+    "run the tests in this repo"
+  ]
+}

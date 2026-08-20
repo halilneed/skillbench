@@ -1,0 +1,17 @@
+{
+  "skill": "collide",
+  "should_trigger": [
+    "/skillbench:collide",
+    "the wrong skill keeps opening for this request",
+    "yanlış skill açılıyor, bunlar çakışıyor mu",
+    "I want to add a skill next to this one, will they compete?",
+    "my hyperframes skill is copied into three agents, are the copies still the same?",
+    "which of my skill descriptions overlap too much?"
+  ],
+  "should_not_trigger": [
+    "lint this skill for broken references",
+    "how often did each skill fire?",
+    "merge these two git branches",
+    "rewrite this skill description to be shorter"
+  ]
+}

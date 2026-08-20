@@ -1,0 +1,17 @@
+{
+  "skill": "coverage",
+  "should_trigger": [
+    "/skillbench:coverage",
+    "which of my skills are actually being used?",
+    "hangi skill'ler gerçekten kullanılıyor, hangileri hiç açılmıyor",
+    "should I delete any of these skills? show me the usage",
+    "has the intake skill ever fired in a real session?",
+    "bu skill'i yazdım ama hiç çalıştığını görmedim, ölç"
+  ],
+  "should_not_trigger": [
+    "check my SKILL.md for mistakes",
+    "which skills overlap with each other?",
+    "how much have I used Claude Code this month?",
+    "show me what the agent did in that session"
+  ]
+}
