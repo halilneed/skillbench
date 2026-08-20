@@ -16,7 +16,8 @@
  *
  * Normalize olay şeması:
  *   { seq, ts, kind, tool, family, command, paths[], url, text, ok, denied,
- *     durationMs, callId, sandboxBypass, raw }
+ *     durationMs, callId, sandboxBypass, chars, raw }
+ *   `text` MAX_TEXT'te kesilir; `chars` (prompt/say olaylarında) kesilmemiş uzunluğu tutar.
  *   kind:   "prompt" | "say" | "call" | "result"
  *   family: "shell" | "edit" | "read" | "search" | "network" | "subagent" | "mcp" | "plan" | "other"
  */
@@ -221,13 +222,13 @@ const claudeCode = {
       if (o.type === "user") {
         if (o.isMeta) continue;
         if (typeof content === "string") {
-          s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(content) });
+          s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(content), chars: String(content).length });
           continue;
         }
         if (!Array.isArray(content)) continue;
         for (const b of content) {
           if (b.type === "text") {
-            s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(b.text) });
+            s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(b.text), chars: String(b.text ?? "").length });
           } else if (b.type === "tool_result") {
             const call = pending.get(b.tool_use_id);
             const raw = typeof b.content === "string"
@@ -374,7 +375,7 @@ const codex = {
       if (p.type === "reasoning") { s.thinkingBlocks++; continue; }
       if (p.type === "user_message") {
         if (!s.title) s.title = cut(p.message, 90);
-        s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(p.message) });
+        s.events.push({ seq: seq++, ts, kind: "prompt", family: "other", text: cut(p.message), chars: String(p.message ?? "").length });
         continue;
       }
       if (p.type === "agent_message") {
@@ -519,12 +520,12 @@ const geminiCli = {
       if (ts) { if (!s.startedAt) s.startedAt = ts; s.endedAt = ts; }
       const parts = t.parts || t.message?.parts || [];
       if (!parts.length && typeof t.message === "string") {
-        s.events.push({ seq: seq++, ts, kind: t.role === "user" ? "prompt" : "say", family: "other", text: cut(t.message) });
+        s.events.push({ seq: seq++, ts, kind: t.role === "user" ? "prompt" : "say", family: "other", text: cut(t.message), chars: String(t.message ?? "").length });
         continue;
       }
       for (const part of parts) {
         if (part.text) {
-          s.events.push({ seq: seq++, ts, kind: t.role === "user" ? "prompt" : "say", family: "other", text: cut(part.text) });
+          s.events.push({ seq: seq++, ts, kind: t.role === "user" ? "prompt" : "say", family: "other", text: cut(part.text), chars: String(part.text ?? "").length });
         } else if (part.functionCall) {
           const name = part.functionCall.name || "?";
           const args = part.functionCall.args || {};

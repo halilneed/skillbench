@@ -202,6 +202,36 @@ function installedPluginNames() {
   } catch { return new Set(); }
 }
 
+/**
+ * Tetikleme eval'ı iki yaygın düzenden birinde olabilir:
+ *   evals/skill-triggers/<ad>.json          → should_trigger / should_not_trigger listeleri
+ *   evals/skill-triggers/<ad>/case.yaml     → vaka başına bir dosya
+ * Yalnızca birincisini aramak, ikinci düzeni kullanan depolarda "eval yok" yanlış
+ * pozitifi üretir.
+ */
+function findEvals({ dir, pluginRoot, dirName }) {
+  const jsonCandidates = [
+    pluginRoot ? join(pluginRoot, "evals", "skill-triggers", `${dirName}.json`) : null,
+    join(dir, "evals", "skill-triggers", `${dirName}.json`),
+    pluginRoot ? join(pluginRoot, "evals", `${dirName}.json`) : null,
+  ].filter(Boolean);
+  const json = jsonCandidates.find((p) => existsSync(p));
+  if (json) return { file: json, kind: "json", cases: null };
+
+  const dirCandidates = [
+    pluginRoot ? join(pluginRoot, "evals", "skill-triggers", dirName) : null,
+    join(dir, "evals", "skill-triggers", dirName),
+    join(dir, "evals"),
+  ].filter(Boolean);
+  for (const d of dirCandidates) {
+    if (!existsSync(d)) continue;
+    let files;
+    try { files = readdirSync(d).filter((f) => /\.(ya?ml|json)$/i.test(f)); } catch { continue; }
+    if (files.length) return { file: join(d, files[0]), kind: "cases", cases: files.length };
+  }
+  return { file: null, kind: null, cases: 0 };
+}
+
 function loadSkill(file, root, installedSet) {
   const dir = dirname(file);
   const text = readFileSync(file, "utf8");
@@ -214,13 +244,7 @@ function loadSkill(file, root, installedSet) {
   const installed = !root.catalog || (plugin ? installedSet.has(plugin) : false);
   const lines = text.split("\n").length;
 
-  // eval dosyası: plugin kökünde ya da skill'in kendi dizininde
-  const evalCandidates = [
-    pluginRoot ? join(pluginRoot, "evals", "skill-triggers", `${dirName}.json`) : null,
-    join(dir, "evals", "skill-triggers", `${dirName}.json`),
-    pluginRoot ? join(pluginRoot, "evals", `${dirName}.json`) : null,
-  ].filter(Boolean);
-  const evalFile = evalCandidates.find((p) => existsSync(p)) || null;
+  const ev = findEvals({ dir, pluginRoot, dirName });
 
   return {
     id: plugin && name ? `${plugin}:${name}` : name || dirName,
@@ -230,7 +254,7 @@ function loadSkill(file, root, installedSet) {
     lines, bytes: Buffer.byteLength(text, "utf8"),
     body: fm.body,
     refs: extractRefs(fm.body, { dir, pluginRoot }),
-    evalFile,
+    evalFile: ev.file, evalKind: ev.kind, evalCases: ev.cases,
     contentHash: hash(text),
   };
 }

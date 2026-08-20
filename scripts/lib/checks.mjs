@@ -118,11 +118,11 @@ export const CHECKS = [
 
   // eval kapsamı
   { id: "eval-missing", severity: "warn", category: "eval",
-    test: (s) => (s.evalFile ? null : `evals/skill-triggers/${s.dirName}.json yok`),
+    test: (s) => (s.evalFile ? null : `evals/skill-triggers/${s.dirName}.json (ya da ${s.dirName}/case.yaml) yok`),
     why: "Tetiklenme dosyası olmadan açıklamayı değiştirdiğinde neyi bozduğunu ölçemezsin.", fix: "should_trigger / should_not_trigger listeleriyle bir eval dosyası ekle." },
   { id: "eval-invalid", severity: "error", category: "eval",
     test: (s) => {
-      if (!s.evalFile) return null;
+      if (!s.evalFile || s.evalKind !== "json") return null; // vaka dosyaları YAML olabilir
       try { JSON.parse(readFileSync(s.evalFile, "utf8")); return null; }
       catch (e) { return `eval dosyası okunamıyor: ${e.message.slice(0, 60)}`; }
     },
@@ -130,6 +130,10 @@ export const CHECKS = [
   { id: "eval-thin", severity: "info", category: "eval",
     test: (s) => {
       if (!s.evalFile) return null;
+      if (s.evalKind === "cases") {
+        // Vaka-başına-dosya düzeninde negatif örnek kavramı yok; yalnızca sayıya bakılır.
+        return (s.evalCases || 0) >= 4 ? null : `vaka dosyası: ${s.evalCases || 0}`;
+      }
       let j; try { j = JSON.parse(readFileSync(s.evalFile, "utf8")); } catch { return null; }
       const yes = (j.should_trigger || []).length, no = (j.should_not_trigger || []).length;
       if (yes >= 4 && no >= 3) return null;
