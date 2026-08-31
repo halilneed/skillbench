@@ -7,6 +7,8 @@
 >
 > *English summary below.*
 
+**Site:** https://hailneed.github.io/skillbench/
+
 Bir skill'in sessizce hiç açılmaması, kırık olmasından daha sık görülür ve fark etmesi çok
 daha zordur. `skillbench` bunu tahmin etmez: aktivasyon kaydını oturum geçmişinden okur.
 
@@ -108,6 +110,7 @@ CI'da `--lint --path . --out lint.json` çalıştırıp `score.raw` değerini e�
 - **Skillbench Cloud (ücretli, opsiyonel):** ekip skill kütüphanesi için sürekli ölçüm,
   açıklama değişikliğinin tetiklenmeye etkisini gösteren regresyon geçmişi, marketplace
   yayıncıları için yayın öncesi kapı. Plugin ücretsiz kalır.
+  Bekleme listesi: https://hailneed.github.io/skillbench/#cloud
 
 Bu depo `agentlens` ailesinin parçası: adaptör katmanı `agent-blackbox` ile paylaşılır,
 kanonik kopya orada durur.
