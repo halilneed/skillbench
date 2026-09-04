@@ -25,30 +25,35 @@ $ npx --yes github:hailneed/skillbench --lint --md
 ```markdown
 # skillbench — lint
 
-**Source note:** 38 skills · installed agent roots · claude-code/installed: 3 ·
-claude-code/user: 13 · gemini-cli/user: 8 · codex/user: 8 · codex/system: 6 ·
-**score:** 223 (poor)
+**Source note:** 22 skill (38 installations) · installed agent roots ·
+claude-code/installed: 3 · claude-code/user: 13 · gemini-cli/user: 8 ·
+codex/user: 8 · codex/system: 6 · **score:** 131 (poor)
 
-1 error · 42 warn · 45 info
+1 error · 24 warn · 25 info
 
 ## By check
 
-| Sev   | Check              |  n | example skills                          |
-|-------|--------------------|----|-----------------------------------------|
-| error | ref-broken-link    |  1 | skill-creator                           |
-| warn  | eval-missing       | 35 | dotnet-web-conventions, intake, …       |
-| warn  | fm-desc-no-trigger |  5 | hyperframes, skill-creator, watch       |
-| warn  | path-absolute      |  1 | intake                                  |
-| info  | fm-desc-no-boundary| 30 | stats, dotnet-web-conventions, …        |
-| info  | ref-cross-skill    |  7 | skill-authoring, hyperframes-cli, …     |
-| info  | agent-lock-in      |  5 | advise, analyze, media-use, …           |
+| Sev   | Check               |  n | example skills                         |
+|-------|---------------------|----|----------------------------------------|
+| error | ref-broken-link     |  1 | skill-creator                          |
+| warn  | eval-missing        | 19 | dotnet-web-conventions, intake, …      |
+| warn  | fm-desc-no-trigger  |  3 | hyperframes, skill-creator, watch      |
+| warn  | path-absolute       |  1 | intake                                 |
+| info  | fm-desc-no-boundary | 16 | stats, dotnet-web-conventions, …       |
+| info  | agent-lock-in       |  3 | advise, analyze, media-use             |
+| info  | eval-thin           |  3 | advise, analyze, stats                 |
 
 - **eval-missing** (warn) — Without a trigger file you cannot measure what a description
   change broke. → *Add an eval file with should_trigger / should_not_trigger lists.*
 ```
 
-That `223 (poor)` is a real score from a real machine with 38 installed skills. 35 of them
-have no eval file at all, so nobody can tell what a description edit breaks.
+That `131 (poor)` is a real score from a real machine. **19 of the 22 skills have no eval
+file at all**, so nobody can tell what a description edit breaks.
+
+Note the source note: 22 skills across 38 installations. Eight of them are mirrored into
+three agent homes each, and a finding derived from a skill's *content* is a property of
+the skill, not of each copy — so it is counted once, with `mirrored: 3` recorded on it.
+Counting per installation would have multiplied the score by however many agents you use.
 
 ## Commands
 

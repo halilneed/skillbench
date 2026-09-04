@@ -28,7 +28,7 @@ import { homedir } from "node:os";
 
 import * as adapters from "./lib/adapters.mjs";
 import { discoverSkills, activationStats, matchActivation } from "./lib/skills.mjs";
-import { lintSkill, lintScore, findCollisions, findDrift, selftest, CHECKS } from "./lib/checks.mjs";
+import { lintSkill, lintScore, dedupeMirrored, distinctSkills, findCollisions, findDrift, selftest, CHECKS } from "./lib/checks.mjs";
 import { renderFindings, severityLabel, levelLabel, normalizeLang, DEFAULT_LANG } from "./lib/i18n.mjs";
 
 // ---------- argümanlar ----------
@@ -101,11 +101,21 @@ function load() {
   return skills;
 }
 
+/**
+ * Kaynak notu **farklı skill** sayısını söyler, kurulum sayısını değil. Aynı skill üç
+ * ajan dizinindeyse "38 skill" demek kullanıcıya sahip olmadığı bir sayı verir; kurulum
+ * sayısı ayrıca yazılır, çünkü kopyaların nerede olduğu da bilgidir.
+ */
 function sourceNote(skills) {
   const by = {};
   for (const s of skills) by[`${s.agent}/${s.source}`] = (by[`${s.agent}/${s.source}`] || 0) + 1;
   const where = PATH ? `\`${PATH}\`` : t("kurulu ajan kökleri", "installed agent roots");
-  return `${skills.length} skill · ${where} · ${Object.entries(by).map(([k, v]) => `${k}: ${v}`).join(" · ")}`;
+  const distinct = distinctSkills(skills);
+  const mirrored = skills.length - distinct;
+  const head = mirrored > 0
+    ? `${distinct} skill (${skills.length} ${t("kurulum", "installations")})`
+    : `${distinct} skill`;
+  return `${head} · ${where} · ${Object.entries(by).map(([k, v]) => `${k}: ${v}`).join(" · ")}`;
 }
 
 // ---------- komut: --list ----------
@@ -133,7 +143,12 @@ const slim = (s) => ({
 
 function cmdLint() {
   const skills = load();
-  const findings = renderFindings(skills.flatMap((s) => lintSkill(s, { ignore: IGNORE })), LANG);
+  // Aynı skill üç ajanda kurulu olabilir; içerik aynıysa bir kez sayılır.
+  // Yoksa puan kopya sayısıyla çarpılır — bkz. dedupeMirrored().
+  const findings = renderFindings(
+    dedupeMirrored(skills.flatMap((s) => lintSkill(s, { ignore: IGNORE })), skills),
+    LANG,
+  );
   const score = lintScore(findings);
 
   const bySkill = new Map();
@@ -185,7 +200,13 @@ function cmdLint() {
     ].filter(Boolean) : []),
   ].join("\n");
 
-  emit({ kind: "lint", generatedAt: new Date().toISOString(), source: { path: PATH, agent: AGENT, catalog: CATALOG, skills: skills.length }, score, byCheck: checks, bySkill: [...bySkill.values()], findings }, md);
+  // `skills` = farklı skill sayısı (CI eşiği bunu kullanır); `installations` = kurulum
+  // sayısı. İkisi ayrı: aynı skill üç ajanda olabilir ve bu kaliteyi üçe katlamaz.
+  emit({
+    kind: "lint", generatedAt: new Date().toISOString(),
+    source: { path: PATH, agent: AGENT, catalog: CATALOG, skills: distinctSkills(skills), installations: skills.length },
+    score, byCheck: checks, bySkill: [...bySkill.values()], findings,
+  }, md);
 }
 
 // ---------- komut: --coverage ----------

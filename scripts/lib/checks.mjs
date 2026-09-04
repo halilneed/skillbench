@@ -140,6 +140,48 @@ export function lintSkill(skill, { ignore = [] } = {}) {
 }
 
 /**
+ * Aynı skill birden çok ajan dizininde kurulu olabilir (`~/.claude/skills`,
+ * `~/.codex/skills`, `~/.gemini/skills`). İçerik birebir aynıysa bu **tek bir
+ * skill'dir**: `eval-missing` ya da `fm-desc-too-short` gibi içerikten türeyen bulgular
+ * kaynağın özelliğidir, kurulumun değil. Kurulum başına saymak puanı kopya sayısıyla
+ * çarpar — tek sorun, üç ceza. Bir kullanıcının aynı skill'i üç ajana kopyalaması
+ * kalitesini üçe katlamaz.
+ *
+ * Ayrım `contentHash` üzerinden yapılır, yalnızca skill adı üzerinden değil: kopyalar
+ * ayrışmışsa (sürüklenme) bulgular gerçekten farklı olabilir ve ikisi de gösterilmeli.
+ * Sürüklenmenin kendisini `findDrift` raporlar.
+ *
+ * Hayatta kalan bulguya `agents` (hangi ajanlarda görüldü) ve `mirrored` (kaç kurulum)
+ * eklenir; bilgi kaybolmaz, yalnızca bir kez sayılır.
+ */
+export function dedupeMirrored(findings, skills = []) {
+  const hashOf = new Map();
+  for (const s of skills) hashOf.set(`${s.id} ${s.agent}`, s.contentHash);
+
+  const seen = new Map();
+  const out = [];
+  for (const f of findings) {
+    // Hash bulunamazsa dosya yoluna düşülür: yol kuruluma özgüdür, yani
+    // birleştirme yapılmaz. Yanlış birleştirmek, birleştirmemekten kötüdür.
+    const h = hashOf.get(`${f.skill} ${f.agent}`) ?? `file:${f.file}`;
+    const key = `${f.check} ${f.skill} ${h}`;
+    const prev = seen.get(key);
+    if (prev) {
+      if (f.agent && !prev.agents.includes(f.agent)) prev.agents.push(f.agent);
+      prev.mirrored = prev.agents.length;
+      continue;
+    }
+    const copy = { ...f, agents: f.agent ? [f.agent] : [], mirrored: 1 };
+    seen.set(key, copy);
+    out.push(copy);
+  }
+  return out;
+}
+
+/** Farklı skill sayısı — kurulum değil. Kaynak notu ve puan bunu kullanır. */
+export const distinctSkills = (skills = []) => new Set(skills.map((s) => s.id)).size;
+
+/**
  * Puan. `level` anahtarı dilden bağımsızdır (`poor`/`fair`/`good`/`clean`);
  * görünen etiket `i18n.mjs`'teki `levelLabel()` ile üretilir. CI eşiği buna
  * bağlanabilsin diye çeviriyle değişmez.
@@ -318,6 +360,39 @@ export function selftest() {
     if (en.why === trr.why) fails.push(`dil: ${id} çevrilmemiş (why iki dilde aynı)`);
   }
 
+  // Kopya birleştirme: aynı içerik tek kez, ayrışmış içerik ayrı ayrı sayılır.
+  {
+    const mk = (agent, hash) => ({ id: "s", agent, contentHash: hash });
+    const kopyalar = [mk("claude-code", "h1"), mk("codex", "h1"), mk("gemini-cli", "h1")];
+    const bulgu = (agent) => ({ check: "eval-missing", severity: "warn", skill: "s", agent, file: `/${agent}/SKILL.md` });
+    const uc = [bulgu("claude-code"), bulgu("codex"), bulgu("gemini-cli")];
+
+    const tek = dedupeMirrored(uc, kopyalar);
+    if (tek.length !== 1) fails.push(`kopya: aynı içerikli 3 kurulum ${tek.length} bulguya indi, 1 olmalı`);
+    if (tek[0] && tek[0].mirrored !== 3) fails.push("kopya: mirrored sayısı 3 değil");
+    if (tek[0] && tek[0].agents.length !== 3) fails.push("kopya: agents listesi 3 ajan taşımıyor");
+    if (lintScore(tek).raw !== 4) fails.push(`kopya: puan kopya sayısıyla çarpılmış (${lintScore(tek).raw}, 4 olmalı)`);
+
+    // Sürüklenmiş kopya birleştirilmemeli: içerik farklıysa bulgular gerçekten ayrı olabilir.
+    const surukmus = [mk("claude-code", "h1"), mk("codex", "h2")];
+    const iki = dedupeMirrored([bulgu("claude-code"), bulgu("codex")], surukmus);
+    if (iki.length !== 2) fails.push(`kopya: ayrışmış içerik birleştirildi (${iki.length}, 2 olmalı)`);
+
+    // Hash bilinmiyorsa birleştirme yapılmaz — yanlış birleştirmek daha kötü.
+    const hashsiz = dedupeMirrored([bulgu("claude-code"), bulgu("codex")], []);
+    if (hashsiz.length !== 2) fails.push("kopya: hash yokken yanlış birleştirildi");
+
+    // Farklı check'ler asla birleşmez.
+    const farkli = dedupeMirrored(
+      [bulgu("claude-code"), { ...bulgu("codex"), check: "fm-desc-too-short" }], kopyalar);
+    if (farkli.length !== 2) fails.push("kopya: farklı check'ler birleştirildi");
+
+    if (distinctSkills(kopyalar) !== 1) fails.push("farklı skill sayımı: 3 kurulum 1 skill olmalı");
+    if (distinctSkills([mk("a", "h1"), { id: "t", agent: "a", contentHash: "h2" }]) !== 2) {
+      fails.push("farklı skill sayımı: 2 ayrı skill 2 saymalı");
+    }
+  }
+
   // Puan seviyesi dilden bağımsız anahtar döndürmeli.
   if (!["poor", "fair", "good", "clean"].includes(lintScore([{ severity: "error" }]).level)) {
     fails.push("puan: seviye nötr anahtar değil");
@@ -327,5 +402,5 @@ export function selftest() {
     fails.push("dil: bilinmeyen dil İngilizceye düşmüyor");
   }
 
-  return { total: cases.length + 4 + 6, fails };
+  return { total: cases.length + 4 + 6 + 9, fails };
 }
