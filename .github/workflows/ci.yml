@@ -1,0 +1,116 @@
+# skillbench — kalite kapısı
+#
+# Doğruladıkları:
+#   1. Kural öz-testi geçiyor (ağ yok, disk yok, bağımlılık yok).
+#   2. Dört komut da çalışıyor.
+#   3. JSON sözleşmesi dilden bağımsız: check/severity/category/vars ve score.level
+#      iki dilde birebir aynı, yalnızca detail/why/fix çevriliyor.
+#   4. Bilinmeyen bayrak sessizce yutulmuyor (exit 2). Bu araçta `--repo` yerine
+#      `--path` var; sessizce yok sayılan bir bayrak, kullanıcının ölçtüğünü sandığı
+#      şeyi ölçmemesine yol açar.
+#   5. Varsayılan rapor Türkçe içermiyor.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["18", "20", "22"]
+    name: node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Rule self-test
+        run: |
+          out="$(node scripts/skillbench.mjs --selftest)"
+          echo "$out"
+          echo "$out" | grep -Eq '^selftest: ([0-9]+)/\1$' || { echo "not all self-tests passed"; exit 1; }
+
+      - name: Commands run
+        run: |
+          node scripts/skillbench.mjs --list --md
+          node scripts/skillbench.mjs --lint --md
+          node scripts/skillbench.mjs --coverage --md
+          node scripts/skillbench.mjs --collide --md
+
+      # Fixture'a bakar, kurulu skill'lere değil: runner'da kurulu ajan yok ve
+      # bulgu üretilmezse dil kapısı bulgu düzyazısını hiç sınamamış olur.
+      - name: JSON output is valid and language-neutral
+        run: |
+          node scripts/skillbench.mjs --lint --path evals/fixture-skills --out en.json
+          node scripts/skillbench.mjs --lint --path evals/fixture-skills --lang tr --out tr.json
+          node -e '
+            const a = require("./en.json"), b = require("./tr.json");
+            const bad = (m) => { console.error(m); process.exit(1); };
+            if (a.kind !== "lint") bad("kind missing, got: " + a.kind);
+            if (a.score.level !== b.score.level) bad("score.level must not depend on --lang");
+            if (!["poor","fair","good","clean"].includes(a.score.level)) bad("score.level not a neutral key: " + a.score.level);
+            if (!a.findings || !a.findings.length) bad("fixture produced no findings — it is meant to be broken");
+            if (a.findings.length !== b.findings.length) bad("finding count differs across languages");
+            for (const [x, y] of a.findings.map((f, i) => [f, b.findings[i]])) {
+              if (x.check !== y.check) bad("check id differs across languages");
+              if (x.category !== y.category) bad("category differs across languages");
+              if (JSON.stringify(x.vars) !== JSON.stringify(y.vars)) bad("vars differ across languages");
+              if (!x.why || !x.fix || !x.detail) bad("finding " + x.check + " has no prose");
+              if (x.why === y.why) bad("why is identical across languages — not translated: " + x.check);
+            }
+            const kinds = [...new Set(a.findings.map((f) => f.check))];
+            console.log("json contract ok · findings: " + a.findings.length + " · checks: " + kinds.join(", "));
+          '
+
+      - name: Category keys are neutral
+        run: |
+          node -e '
+            import("./scripts/lib/checks.mjs").then(async (c) => {
+              const i = await import("./scripts/lib/i18n.mjs");
+              const valid = new Set(Object.keys(i.CATEGORY_LABEL));
+              const bad = [...new Set(c.CHECKS.map((x) => x.category))].filter((k) => !valid.has(k));
+              if (bad.length) { console.error("non-neutral category keys: " + bad.join(", ")); process.exit(1); }
+              console.log("category keys ok: " + [...valid].join(", "));
+            });
+          '
+
+      - name: Unknown flag must exit non-zero
+        run: |
+          if node scripts/skillbench.mjs --no-such-flag >/dev/null 2>&1; then
+            echo "unknown flag exited 0 — a typo would pass silently in CI"
+            exit 1
+          fi
+          # `--repo` bu araca ait değil (`--path` var); sessizce yok sayılmamalı.
+          if node scripts/skillbench.mjs --lint --repo . >/dev/null 2>&1; then
+            echo "--repo was silently accepted, but this tool takes --path"
+            exit 1
+          fi
+          echo "unknown flags correctly rejected"
+
+      - name: Default output carries no Turkish
+        run: |
+          node scripts/skillbench.mjs --lint --path evals/fixture-skills --md > out.md
+          node -e '
+            const fs = require("fs");
+            const bad = fs.readFileSync("out.md", "utf8")
+              .split(/\r?\n/)
+              .filter((l) => /[çğıöşüÇĞİÖŞÜ]/.test(l));
+            if (bad.length) {
+              console.error("Turkish leaked into default (English) output:");
+              bad.forEach((l) => console.error("  " + l));
+              process.exit(1);
+            }
+            console.log("default output is English-only");
+          '

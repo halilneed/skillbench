@@ -1,148 +1,224 @@
 # skillbench
 
-> Kodlama ajanı skill'leri için **lint + gerçek kullanım kanıtı**. Üç soruyu cevaplar:
-> skill'im doğru yazılmış mı, **gerçekten tetikleniyor mu**, başka bir skill'in işine mi
-> giriyor? Claude Code, Codex CLI ve Gemini CLI'daki skill'leri birlikte görür.
-> Ağ çağrısı yok, kota harcanmaz.
+[![CI](https://github.com/hailneed/skillbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hailneed/skillbench/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](#requirements)
+
+> **Lint plus real-usage evidence for coding-agent skills.** Answers three questions: is my
+> skill written correctly, does it **actually trigger**, and is it competing with another
+> skill? Sees skills across Claude Code, Codex CLI and Gemini CLI at once.
 >
-> *English summary below.*
+> No network calls. No API key. No quota.
 
-**Site:** https://hailneed.github.io/skillbench/
+**Site:** https://hailneed.github.io/skillbench/ · *Türkçe açıklama aşağıda.*
 
-Bir skill'in sessizce hiç açılmaması, kırık olmasından daha sık görülür ve fark etmesi çok
-daha zordur. `skillbench` bunu tahmin etmez: aktivasyon kaydını oturum geçmişinden okur.
+A skill that quietly never opens is more common than a skill that is broken — and far
+harder to notice. `skillbench` does not guess at this: it reads the activation record out
+of your session history.
 
-## Ne yapar?
-
-| Komut                        | Ne verir                                                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `/skillbench:lint [yol]`     | **Lint**: frontmatter sözleşmesi, açıklama kalitesi (tetikleyici ifade, negatif sınır), gövde boyutu, kırık referans, taşınabilirlik, izin genişliği, eval kapsamı |
-| `/skillbench:coverage`       | **Gerçek kullanım**: hangi skill kaç kez, kaç oturumda, hangi projede ateşledi; hiç açılmayanlar ve nedeni       |
-| `/skillbench:collide`        | **Çakışma ve sürüklenme**: hangi iki açıklama aynı isteğe aday oluyor ve hangi kelimeler yüzünden; çoklu ajana kopyalanmış skill'lerin kopyaları hâlâ aynı mı |
-
-26 lint kuralı, üç önem düzeyi (`hata` / `uyarı` / `bilgi`) ve her kural için "neden önemli"
-ile "nasıl düzeltilir" satırı. Kural motoru şeffaftır — beğenmediğini `--ignore` ile
-kapatırsın.
-
-## Gerçek kullanım nasıl ölçülüyor?
-
-Claude Code her araç çağrısında **hangi skill'in aktif olduğunu** transcript'e yazıyor
-(`attributionSkill` / `attributionPlugin`). `skillbench` bu alanı okuyup skill başına çağrı,
-farklı oturum sayısı, proje ve son kullanım tarihine çeviriyor.
-
-> **Codex CLI ve Gemini CLI bu bilgiyi yapısal olarak kaydetmiyor.** O ajanlardaki skill'ler
-> raporda "ölçülemedi" olarak geçer — "hiç kullanılmadı" olarak **değil**. Canlı tetiklenme
-> testi (`claude -p` ile ölçüm) v0.2'ye bırakıldı çünkü kota harcıyor.
-
-Bu ayrım ürünün merkezinde: sayı yoksa "sayı yok" yazar, tahmin üretmez.
-
-## Desteklenen konumlar
-
-| Konum | Ne | Durum |
-|---|---|---|
-| `~/.claude/skills/<ad>/SKILL.md` | Claude Code kullanıcı skill'i | **doğrulandı** |
-| `~/.claude/skills/<plugin>/skills/…` | plugin olarak kurulmuş paket (symlink dahil) | **doğrulandı** |
-| `~/.claude/plugins/cache/…` | kurulu marketplace plugin'i | **doğrulandı** |
-| `~/.claude/plugins/marketplaces/…` | katalog girdisi (kurulu değil) | `--catalog` ile dahil edilir; dosya ve eval denetimleri atlanır |
-| `~/.gemini/skills/<ad>/SKILL.md` | Gemini CLI | **doğrulandı** |
-| `~/.codex/skills/<ad>/SKILL.md` | Codex CLI (`.system/` yerleşikleri dahil) | **doğrulandı** |
-| `--path <depo>` | geliştirmekte olduğun depo | ana geliştirme modu |
-
-Sembolik bağlar izlenir: `~/.claude/skills/<ad>` sık sık geliştirme deposuna bağlanır ve
-`Dirent.isDirectory()` bir symlink için `false` döndüğü için naif bir tarayıcı o skill'leri
-tamamen kaçırır.
-
-## Kurulum
+## What it looks like
 
 ```
-# Claude Code içinde, bir kez marketplace ekle:
+$ npx --yes github:hailneed/skillbench --lint --md
+```
+
+```markdown
+# skillbench — lint
+
+**Source note:** 38 skills · installed agent roots · claude-code/installed: 3 ·
+claude-code/user: 13 · gemini-cli/user: 8 · codex/user: 8 · codex/system: 6 ·
+**score:** 223 (poor)
+
+1 error · 42 warn · 45 info
+
+## By check
+
+| Sev   | Check              |  n | example skills                          |
+|-------|--------------------|----|-----------------------------------------|
+| error | ref-broken-link    |  1 | skill-creator                           |
+| warn  | eval-missing       | 35 | dotnet-web-conventions, intake, …       |
+| warn  | fm-desc-no-trigger |  5 | hyperframes, skill-creator, watch       |
+| warn  | path-absolute      |  1 | intake                                  |
+| info  | fm-desc-no-boundary| 30 | stats, dotnet-web-conventions, …        |
+| info  | ref-cross-skill    |  7 | skill-authoring, hyperframes-cli, …     |
+| info  | agent-lock-in      |  5 | advise, analyze, media-use, …           |
+
+- **eval-missing** (warn) — Without a trigger file you cannot measure what a description
+  change broke. → *Add an eval file with should_trigger / should_not_trigger lists.*
+```
+
+That `223 (poor)` is a real score from a real machine with 38 installed skills. 35 of them
+have no eval file at all, so nobody can tell what a description edit breaks.
+
+## Commands
+
+| Command | What you get |
+|---|---|
+| `/skillbench:lint [path]` | **Lint**: the frontmatter contract, description quality (trigger phrasing, negative boundary), body size, broken references, portability, permission breadth, eval coverage |
+| `/skillbench:coverage` | **Real usage**: which skill fired how many times, in how many sessions, on which project; and which never opened, with the reason |
+| `/skillbench:collide` | **Collision and drift**: which two descriptions compete for the same request and on which shared words; and whether copies of a skill mirrored into several agents still match |
+
+26 lint checks, three severities (`error` / `warn` / `info`), and for every check a "why it
+matters" and a "how to fix it" line. The rule engine is transparent — silence any check
+you disagree with using `--ignore`.
+
+## How real usage is measured
+
+Claude Code records **which skill was active** for every tool call in the transcript
+(`attributionSkill` / `attributionPlugin`). `skillbench` reads that field and turns it into
+calls per skill, distinct session count, project, and last-used date.
+
+> **Codex CLI and Gemini CLI do not record this structurally.** Skills on those agents are
+> reported as *unmeasured* — **not** as *unused*. Live trigger testing (measuring with
+> `claude -p`) is deferred to v0.2 because it costs quota.
+
+That distinction is the centre of the product: when there is no number, it says there is no
+number instead of inventing one.
+
+## Supported locations
+
+| Location | What | Status |
+|---|---|---|
+| `~/.claude/skills/<name>/SKILL.md` | Claude Code user skill | **verified** |
+| `~/.claude/skills/<plugin>/skills/…` | package installed as a plugin (symlinks included) | **verified** |
+| `~/.claude/plugins/cache/…` | installed marketplace plugin | **verified** |
+| `~/.claude/plugins/marketplaces/…` | catalogue entry (not installed) | included with `--catalog`; file and eval checks are skipped |
+| `~/.gemini/skills/<name>/SKILL.md` | Gemini CLI | **verified** |
+| `~/.codex/skills/<name>/SKILL.md` | Codex CLI (including `.system/` built-ins) | **verified** |
+| `--path <repo>` | the repo you are developing | the main development mode |
+
+Symlinks are followed. `~/.claude/skills/<name>` is very often linked to a development
+repo, and because `Dirent.isDirectory()` returns `false` for a symlink, a naive scanner
+misses those skills entirely.
+
+## Install
+
+```
+# Inside Claude Code, once:
 /plugin marketplace add hailneed/plugins
 /plugin install skillbench@hailneed
 ```
 
-Sonra dene:
+Then:
 
 ```
 /skillbench:coverage
 ```
 
-Gereksinim: Claude Code + Node.js 18+. Bağımlılık yok, API anahtarı yok.
+### Requirements
 
-## Plugin'siz kullanım
+Claude Code + Node.js 18+. No dependencies, no API key.
+
+## Without the plugin
 
 ```
 git clone https://github.com/hailneed/skillbench
 cd skillbench
 
-node scripts/skillbench.mjs --list --md                  # bulunan skill'ler
+node scripts/skillbench.mjs --list --md                  # skills that were found
 node scripts/skillbench.mjs --lint --path ../my-plugin --md
-node scripts/skillbench.mjs --coverage --days 90 --md    # gerçek aktivasyon
-node scripts/skillbench.mjs --collide --md               # çakışma + sürüklenme
-node scripts/skillbench.mjs --selftest                   # kural öz-testi (ağ/disk yok)
+node scripts/skillbench.mjs --coverage --days 90 --md    # real activations
+node scripts/skillbench.mjs --collide --md               # collision + drift
+node scripts/skillbench.mjs --selftest                   # rule self-test (no network/disk)
 ```
 
-Bayraklar: `--agent all|claude-code|codex|gemini-cli` · `--path DIZIN` · `--catalog` ·
-`--lang tr|en` · `--out DOSYA` · `--limit N` · `--ignore kural1,kural2`.
+Flags: `--agent all|claude-code|codex|gemini-cli` · `--path DIR` · `--catalog` ·
+`--lang en|tr` · `--out FILE` · `--limit N` · `--ignore check1,check2`.
 
-CI'da `--lint --path . --out lint.json` çalıştırıp `score.raw` değerini eşiğe bağlayabilirsin;
-çıktı formatı sabittir ve `--selftest` ağ gerektirmez.
+Note it is `--path`, not `--repo`. An unrecognised flag exits **2** rather than being
+ignored, so you never measure a different scope than you meant to.
 
-## Nasıl çalışır?
+## In CI
 
-1. **Keşif** (`scripts/lib/skills.mjs`) üç ajanın skill köklerini ve plugin dizinlerini
-   gezer, frontmatter'ı öngörülebilir bir YAML alt kümesiyle ayrıştırır, gövdedeki dosya
-   atıflarını çıkarır ve çözer. Bir yol; skill'in kendi dizini, kardeş skill'ler ve plugin
-   kökü üzerinden denenir — çapraz atıflar kırık gibi raporlanmaz.
-2. **Kurallar** (`scripts/lib/checks.mjs`) 26 denetimi uygular; ayrıca açıklama benzerliğini
-   idf ağırlıklı kosinüsle ölçer ve çoklu kopyaların içerik parmak izini karşılaştırır.
-3. **Aktivasyon** (`scripts/lib/adapters.mjs`) — `agent-blackbox`'tan gelen ortak adaptör
-   katmanı; oturum kayıtlarını tek olay şemasına çevirir, skill atıfları oradan okunur.
-4. **Skill'ler** çıktıyı yorumlar: `lint` bulguları düzenlemeye çevirir, `coverage` soğuk
-   bir skill'in dört olası nedenini ayırt eder, `collide` çakışmayı **tek taraflı** bir sınır
-   satırı ekleyerek çözmeyi önerir.
+The JSON output is **language-neutral**: `check`, `severity`, `category`, `vars` and
+`score.level` are identical whatever `--lang` you pass. Only `detail`, `why` and `fix` are
+localised, so a threshold never breaks on a translation.
 
-## Yol haritası (ve nasıl para kazanır)
+```yaml
+- run: node scripts/skillbench.mjs --lint --path . --out lint.json
+- run: |
+    node -e '
+      const a = require("./lint.json");
+      const errors = a.findings.filter((f) => f.severity === "error");
+      if (errors.length) {
+        console.error(errors.map((f) => f.check + ": " + f.skill).join("\n"));
+        process.exit(1);
+      }
+      if (a.score.raw > 40) { console.error("lint score too high: " + a.score.raw); process.exit(1); }
+    '
+```
 
-- **v0.1 (bu repo):** 3 skill + bağımlılıksız tarayıcı + 26 kural, MIT.
-- **v0.2:** canlı tetiklenme testi (`should_trigger` / `should_not_trigger` prompt'larını
-  gerçekten çalıştırıp oran ölçme, bütçe kapısıyla), açıklama yeniden yazma önerisi ve
-  öncesi/sonrası tetiklenme karşılaştırması, `--format sarif`, GitHub Action.
-- **Skillbench Cloud (ücretli, opsiyonel):** ekip skill kütüphanesi için sürekli ölçüm,
-  açıklama değişikliğinin tetiklenmeye etkisini gösteren regresyon geçmişi, marketplace
-  yayıncıları için yayın öncesi kapı. Plugin ücretsiz kalır.
-  Bekleme listesi: https://hailneed.github.io/skillbench/#cloud
+`score.level` is one of `poor` · `fair` · `good` · `clean`. Check categories are
+`frontmatter` · `activation` · `structure` · `reference` · `portability` · `permission` ·
+`eval`.
 
-Bu depo `agentlens` ailesinin parçası: adaptör katmanı `agent-blackbox` ile paylaşılır,
-kanonik kopya orada durur.
+## How it works
+
+1. **Discovery** (`scripts/lib/skills.mjs`) walks the skill roots and plugin directories of
+   three agents, parses frontmatter with a predictable YAML subset, and extracts and
+   resolves the file references in the body. A path is tried against the skill's own
+   directory, sibling skills and the plugin root — so cross-references are not reported
+   as broken.
+2. **Rules** (`scripts/lib/checks.mjs`) apply 26 checks, measure description similarity
+   with idf-weighted cosine, and compare the content fingerprints of mirrored copies.
+   Findings are machine data; all prose lives in `scripts/lib/i18n.mjs`.
+3. **Activation** (`scripts/lib/adapters.mjs`) — the shared adapter layer from
+   `agent-blackbox`; it turns session logs into one event schema, and skill attribution is
+   read from there.
+4. **The skills** interpret the output: `lint` turns findings into edits, `coverage`
+   distinguishes the four possible reasons a skill is cold, and `collide` proposes fixing
+   an overlap by adding a **one-sided** boundary line.
+
+## Roadmap (and how it makes money)
+
+- **v0.1 (this repo):** 3 skills + a dependency-free scanner + 26 checks, MIT.
+- **v0.2:** live trigger testing (actually running the `should_trigger` /
+  `should_not_trigger` prompts and measuring the rate, behind a budget gate), description
+  rewrite suggestions with a before/after trigger comparison, `--format sarif`.
+- **Skillbench Cloud (paid, optional):** continuous measurement for a team skill library,
+  regression history showing what a description change did to triggering, and a
+  pre-publish gate for marketplace authors. The plugin stays free.
+  Waitlist: https://hailneed.github.io/skillbench/#cloud
+
+This repo is part of the `agentlens` family: the adapter layer is shared with
+[`agent-blackbox`](https://github.com/hailneed/agent-blackbox), where the canonical copy lives.
+
+## License
+
+MIT.
 
 ---
 
-## English summary
+## Türkçe
 
-**skillbench** is lint plus real-usage evidence for coding-agent skills. It answers three
-questions:
+**skillbench**, kodlama ajanı skill'leri için lint ve gerçek kullanım kanıtı aracıdır. Üç
+soruyu cevaplar:
 
-- **`/skillbench:lint`** — is the skill written correctly? 26 transparent checks across
-  frontmatter, activation quality, structure, references, portability, tool permissions and
-  eval coverage. Works on a repo you are developing (`--path`) or on every skill installed
-  across Claude Code, Codex CLI and Gemini CLI.
-- **`/skillbench:coverage`** — does it actually fire? Claude Code records which skill was
-  active for each tool call; this counts real activations per skill, with distinct sessions,
-  projects and recency, and lists the ones that never fired.
-- **`/skillbench:collide`** — do two skills compete for the same request? An idf-weighted
-  overlap score with the shared terms that blur the boundary, plus drift detection for
-  skills mirrored into several agent homes.
+- **`/skillbench:lint`** — skill doğru yazılmış mı? Frontmatter sözleşmesi, aktivasyon
+  kalitesi, yapı, referanslar, taşınabilirlik, araç izinleri ve eval kapsamı üzerinde 26
+  şeffaf denetim. Geliştirdiğin depoda (`--path`) ya da Claude Code, Codex CLI ve Gemini
+  CLI'da kurulu tüm skill'lerde çalışır.
+- **`/skillbench:coverage`** — gerçekten ateşliyor mu? Claude Code her araç çağrısında hangi
+  skill'in aktif olduğunu kaydeder; bu, skill başına gerçek aktivasyona, farklı oturum
+  sayısına, projeye ve son kullanım tarihine çevrilir. Hiç açılmayanlar listelenir.
+- **`/skillbench:collide`** — iki skill aynı isteğe mi giriyor? idf ağırlıklı örtüşme puanı
+  ve sınırı bulanıklaştıran ortak kelimeler; ayrıca birden çok ajan dizinine kopyalanmış
+  skill'ler için sürüklenme tespiti.
 
-**Honest by construction:** only Claude Code stores skill attribution. Skills on Codex CLI
-and Gemini CLI are reported as *unmeasured*, never as *unused*. Live trigger testing is
-deliberately deferred to v0.2 because it costs quota.
+**Yapısı gereği dürüst:** skill atıfını yalnızca Claude Code saklıyor. Codex CLI ve Gemini
+CLI'daki skill'ler *ölçülemedi* olarak raporlanır, *kullanılmadı* olarak **değil**. Canlı
+tetiklenme testi kota harcadığı için bilerek v0.2'ye bırakıldı.
 
-**Nothing leaves your machine.** No network calls, no API key, no quota. Node.js 18+, no
-dependencies.
+**Hiçbir şey makineden çıkmaz.** Ağ çağrısı yok, API anahtarı yok, kota yok. Node.js 18+,
+bağımlılık yok.
+
+Çıktı varsayılan olarak İngilizcedir; Türkçe için `--lang tr` ver:
+
+```
+node scripts/skillbench.mjs --coverage --md --lang tr
+```
 
 ```
 /plugin marketplace add hailneed/plugins
 /plugin install skillbench@hailneed
 ```
-
-Or standalone: `node scripts/skillbench.mjs --coverage --md --lang en`. MIT.

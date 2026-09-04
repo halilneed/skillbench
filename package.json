@@ -1,0 +1,45 @@
+{
+  "name": "@hailneed/skillbench",
+  "version": "0.1.0",
+  "description": "Lint and real-usage evidence for agent skills. Checks frontmatter, activation triggers, references, permissions and eval coverage across Claude Code, Codex and Gemini CLI, finds descriptions that collide, and measures which skills actually fired in your real sessions. No network calls, no API key.",
+  "type": "module",
+  "bin": {
+    "skillbench": "scripts/skillbench.mjs"
+  },
+  "scripts": {
+    "test": "node scripts/skillbench.mjs --selftest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "scripts",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "gemini-cli",
+    "skills",
+    "lint",
+    "activation",
+    "local-first",
+    "ai-agents"
+  ],
+  "author": {
+    "name": "Halil Ataş",
+    "url": "https://github.com/hailneed"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hailneed/skillbench.git"
+  },
+  "homepage": "https://hailneed.github.io/skillbench/",
+  "bugs": {
+    "url": "https://github.com/hailneed/skillbench/issues"
+  },
+  "license": "MIT"
+}

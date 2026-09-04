@@ -29,6 +29,7 @@ import { homedir } from "node:os";
 import * as adapters from "./lib/adapters.mjs";
 import { discoverSkills, activationStats, matchActivation } from "./lib/skills.mjs";
 import { lintSkill, lintScore, findCollisions, findDrift, selftest, CHECKS } from "./lib/checks.mjs";
+import { renderFindings, severityLabel, levelLabel, normalizeLang, DEFAULT_LANG } from "./lib/i18n.mjs";
 
 // ---------- argümanlar ----------
 const argv = process.argv.slice(2);
@@ -37,20 +38,39 @@ const opt = (n, fb = null) => { const i = argv.indexOf(n); return i > -1 && argv
 const list = (v) => (v ? String(v).split(",").map((s) => s.trim()).filter(Boolean) : []);
 
 const AGENT = opt("--agent", "all");
+/**
+ * Tanınan bayraklar. Bilinmeyen bayrak sessizce yutulmaz: `--repo` gibi (bu araçta
+ * `--path`) yanlış bir bayrak aksi halde yok sayılır ve tarama başka bir kapsamda
+ * çalışır — kullanıcı ölçtüğünü sandığı şeyi ölçmemiş olur.
+ */
+const BOOL_FLAGS = new Set(["--list", "--lint", "--coverage", "--collide", "--selftest", "--catalog", "--md", "--help", "-h"]);
+const VALUE_FLAGS = new Set(["--agent", "--path", "--days", "--limit", "--lang", "--out", "--ignore"]);
+
+function validateArgs() {
+  const unknown = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith("-")) continue;              // değer konumu, atla
+    if (BOOL_FLAGS.has(a)) continue;
+    if (VALUE_FLAGS.has(a)) { i++; continue; }     // kendi değerini tüketir
+    unknown.push(a);
+  }
+  return unknown;
+}
+
 const PATH = opt("--path");
 const CATALOG = flag("--catalog");
 const DAYS = parseInt(opt("--days", "0"), 10) || 0;
 const LIMIT = Math.max(1, parseInt(opt("--limit", "50"), 10) || 50);
-const LANG = opt("--lang", "tr") === "en" ? "en" : "tr";
+// Varsayılan İngilizce: araç İngilizce konuşan bir kitleye çıkıyor. Türkçe `--lang tr` ile.
+const LANG = normalizeLang(opt("--lang", DEFAULT_LANG));
 const OUT = opt("--out");
 const IGNORE = list(opt("--ignore"));
 const MD = flag("--md");
 
 const tr = LANG === "tr";
-const SEV = { error: tr ? "hata" : "error", warn: tr ? "uyarı" : "warn", info: tr ? "bilgi" : "info" };
-const LEVEL = tr
-  ? { kotu: "kötü", orta: "orta", iyi: "iyi", temiz: "temiz" }
-  : { kotu: "poor", orta: "fair", iyi: "good", temiz: "clean" };
+const SEV = { error: severityLabel("error", LANG), warn: severityLabel("warn", LANG), info: severityLabel("info", LANG) };
+const LEVEL = { poor: levelLabel("poor", LANG), fair: levelLabel("fair", LANG), good: levelLabel("good", LANG), clean: levelLabel("clean", LANG) };
 
 const t = (a, b) => (tr ? a : b);
 
@@ -113,7 +133,7 @@ const slim = (s) => ({
 
 function cmdLint() {
   const skills = load();
-  const findings = skills.flatMap((s) => lintSkill(s, { ignore: IGNORE }));
+  const findings = renderFindings(skills.flatMap((s) => lintSkill(s, { ignore: IGNORE })), LANG);
   const score = lintScore(findings);
 
   const bySkill = new Map();
@@ -260,6 +280,18 @@ function cmdCollide() {
 // ---------- giriş ----------
 
 function main() {
+  const unknown = validateArgs();
+  if (unknown.length) {
+    process.stderr.write(
+      `${t("bilinmeyen bayrak", "unknown flag")}: ${unknown.join(", ")}\n\n${usage()}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  if (flag("--help") || flag("-h")) {
+    process.stdout.write(usage());
+    return;
+  }
   if (flag("--selftest")) {
     const r = selftest();
     process.stdout.write(`${t("öz-test", "selftest")}: ${r.total - r.fails.length}/${r.total}\n`);
@@ -271,21 +303,32 @@ function main() {
   if (flag("--coverage")) return cmdCoverage();
   if (flag("--collide")) return cmdCollide();
 
-  process.stdout.write([
-    "skillbench — skill'ler için lint ve gerçek kullanım kanıtı",
+  process.stdout.write(usage());
+}
+
+function usage() {
+  return [
+    t("skillbench — skill'ler için lint ve gerçek kullanım kanıtı",
+      "skillbench — lint and real-usage evidence for agent skills"),
     "",
-    "  --list                       bulunan skill'leri listeler",
-    "  --lint [--path DIZIN]        yazım, referans, izin ve eval denetimi",
-    "  --coverage [--days N]        gerçek oturum kayıtlarından aktivasyon istatistiği",
-    "  --collide                    açıklama çakışması ve kopya sürüklenmesi",
-    "  --selftest                   kural öz-testi (ağ/disk yok)",
+    t("  --list                       bulunan skill'leri listeler",
+      "  --list                       list the skills that were found"),
+    t("  --lint [--path DIZIN]        yazım, referans, izin ve eval denetimi",
+      "  --lint [--path DIR]          authoring, reference, permission and eval checks"),
+    t("  --coverage [--days N]        gerçek oturum kayıtlarından aktivasyon istatistiği",
+      "  --coverage [--days N]        activation stats from real session logs"),
+    t("  --collide                    açıklama çakışması ve kopya sürüklenmesi",
+      "  --collide                    description collisions and copy drift"),
+    t("  --selftest                   kural öz-testi (ağ/disk yok)",
+      "  --selftest                   rule self-test (no network, no disk)"),
     "",
-    "  --agent all|claude-code|codex|gemini-cli · --catalog · --md · --lang tr|en",
-    "  --out DOSYA · --limit N · --ignore kural1,kural2",
+    "  --agent all|claude-code|codex|gemini-cli · --catalog · --md · --lang en|tr",
+    t("  --out DOSYA · --limit N · --ignore kural1,kural2",
+      "  --out FILE · --limit N · --ignore check1,check2"),
     "",
-    `${CHECKS.length} lint kuralı · ${t("çıktı dizini önerisi", "suggested output dir")}: ${outDir()}`,
+    `${CHECKS.length} ${t("lint kuralı", "lint checks")} · ${t("çıktı dizini önerisi", "suggested output dir")}: ${outDir()}`,
     "",
-  ].join("\n"));
+  ].join("\n");
 }
 
 main();

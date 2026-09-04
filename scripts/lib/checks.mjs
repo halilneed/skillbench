@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { MESSAGE_KEYS, CATEGORY_LABEL, renderFinding } from "./i18n.mjs";
 
 const SEV_WEIGHT = { error: 10, warn: 4, info: 1 };
 
@@ -32,138 +33,120 @@ const LITERAL_TILDE_RE = /(?:--(?:out|output|file|path|dir)|[-\s]o|>)\s+"?~[/\\]
 export const CHECKS = [
   // frontmatter
   { id: "fm-missing", severity: "error", category: "frontmatter",
-    test: (s) => (!s.frontmatterOk ? "SKILL.md bir `---` frontmatter bloğuyla başlamıyor" : null),
-    why: "Frontmatter olmadan skill hiç yüklenmez.", fix: "Dosyanın başına `---` ile ad ve açıklama bloğu ekle." },
+    test: (s) => (!s.frontmatterOk ? {} : null) },
   { id: "fm-no-name", severity: "error", category: "frontmatter",
-    test: (s) => (s.frontmatterOk && !s.name ? "`name` alanı yok" : null),
-    why: "Ad olmadan skill çağrılamaz.", fix: "`name: <dizin-adı>` ekle." },
+    test: (s) => (s.frontmatterOk && !s.name ? {} : null) },
   { id: "fm-no-description", severity: "error", category: "frontmatter",
-    test: (s) => (s.frontmatterOk && !s.description ? "`description` alanı yok" : null),
-    why: "Aktivasyon kararı yalnızca açıklamaya bakar; boşsa skill hiç tetiklenmez.", fix: "Ne yaptığını ve ne zaman kullanılacağını yazan bir açıklama ekle." },
+    test: (s) => (s.frontmatterOk && !s.description ? {} : null) },
   { id: "fm-name-dir-mismatch", severity: "error", category: "frontmatter",
-    test: (s) => (s.name && s.name !== s.dirName ? `\`name: ${s.name}\` ama dizin \`${s.dirName}\`` : null),
-    why: "Ad ile dizin ayrıştığında skill beklenen komutla çağrılamaz.", fix: "İkisini eşitle." },
+    test: (s) => (s.name && s.name !== s.dirName ? { name: s.name, dirName: s.dirName } : null) },
   { id: "fm-name-format", severity: "warn", category: "frontmatter",
-    test: (s) => (s.name && !NAME_RE.test(s.name) ? `\`${s.name}\` kebab-case değil` : null),
-    why: "Büyük harf, boşluk ve alt çizgi platformlar arası taşınmıyor.", fix: "Küçük harf ve tire kullan." },
-  { id: "fm-desc-too-short", severity: "warn", category: "aktivasyon",
-    test: (s) => (s.description && s.description.length < 80 ? `açıklama ${s.description.length} karakter` : null),
-    why: "Kısa açıklama yeterli tetikleyici sinyal taşımaz; skill sessizce hiç açılmaz.", fix: "Ne yaptığını, ne zaman kullanılacağını ve kullanıcının kuracağı cümleleri ekle." },
-  { id: "fm-desc-too-long", severity: "warn", category: "aktivasyon",
-    test: (s) => (s.description.length > 1024 ? `açıklama ${s.description.length} karakter` : null),
-    why: "Çok uzun açıklama her istekle bağlama giriyor ve ayırt ediciliği azalıyor.", fix: "Ayrıntıyı gövdeye taşı; açıklamada tetikleyici ifadeleri bırak." },
-  { id: "fm-desc-no-trigger", severity: "warn", category: "aktivasyon",
-    test: (s) => (s.description && !TRIGGER_RE.test(s.description) ? "açıklamada \"use when …\" türü tetikleyici ifade yok" : null),
-    why: "Ne yaptığını söyleyen ama ne zaman kullanılacağını söylemeyen açıklama yanlış zamanda açılır ya da hiç açılmaz.", fix: "\"Use when the user asks …\" biçiminde somut durumlar ekle." },
-  { id: "fm-desc-no-boundary", severity: "info", category: "aktivasyon",
-    test: (s) => (s.description && s.description.length > 120 && !BOUNDARY_RE.test(s.description) ? "açıklamada negatif sınır yok" : null),
-    why: "Sınır yazılmadığında yakın skill'ler aynı isteğe aday oluyor.", fix: "\"Not for X — that is <diğer-skill>.\" satırı ekle." },
-  { id: "fm-desc-first-person", severity: "warn", category: "aktivasyon",
-    test: (s) => (FIRST_PERSON_RE.test(s.description) ? `açıklama "${s.description.slice(0, 40)}…" ile başlıyor` : null),
-    why: "Açıklama ajana yönelik bir yönerge değil, üçüncü şahıs bir kapsam tarifi olmalı.", fix: "\"Bu skill …\" yerine doğrudan işi ve tetikleyicileri yaz." },
+    test: (s) => (s.name && !NAME_RE.test(s.name) ? { name: s.name } : null) },
+  { id: "fm-desc-too-short", severity: "warn", category: "activation",
+    test: (s) => (s.description && s.description.length < 80 ? { length: s.description.length } : null) },
+  { id: "fm-desc-too-long", severity: "warn", category: "activation",
+    test: (s) => (s.description.length > 1024 ? { length: s.description.length } : null) },
+  { id: "fm-desc-no-trigger", severity: "warn", category: "activation",
+    test: (s) => (s.description && !TRIGGER_RE.test(s.description) ? {} : null) },
+  { id: "fm-desc-no-boundary", severity: "info", category: "activation",
+    test: (s) => (s.description && s.description.length > 120 && !BOUNDARY_RE.test(s.description) ? {} : null) },
+  { id: "fm-desc-first-person", severity: "warn", category: "activation",
+    test: (s) => (FIRST_PERSON_RE.test(s.description) ? { head: s.description.slice(0, 40) } : null) },
   { id: "fm-unknown-key", severity: "info", category: "frontmatter",
-    test: (s) => { const u = (s.keys || []).filter((k) => !KNOWN_KEYS.has(k)); return u.length ? `bilinmeyen alan: ${u.join(", ")}` : null; },
-    why: "Tanınmayan alan sessizce yok sayılır; yazım hatası olabilir.", fix: "Alan adını doğrula ya da kaldır." },
+    test: (s) => { const u = (s.keys || []).filter((k) => !KNOWN_KEYS.has(k)); return u.length ? { keys: u.join(", ") } : null; } },
 
   // gövde
-  { id: "body-very-long", severity: "error", category: "yapi",
-    test: (s) => (s.lines > 800 ? `${s.lines} satır` : null),
-    why: "Bu boyutta bir skill her açılışta bağlamı doldurur ve modelin talimatı takip etme oranı düşer.", fix: "Bölümleri `references/` altına ayır, gövdede yalnızca akışı bırak." },
-  { id: "body-too-long", severity: "warn", category: "yapi",
-    test: (s) => (s.lines > 500 && s.lines <= 800 ? `${s.lines} satır` : null),
-    why: "500 satırın üstü kademeli açıklama (progressive disclosure) için sınır kabul edilir.", fix: "Ayrıntıyı `references/` altına taşı." },
-  { id: "body-no-structure", severity: "info", category: "yapi",
-    test: (s) => (s.lines > 60 && !/^##\s/m.test(s.body) ? "hiç `##` başlığı yok" : null),
-    why: "Başlıksız uzun gövdede model adımları atlıyor.", fix: "Adımları `## Step 1 …` gibi başlıklara böl." },
+  { id: "body-very-long", severity: "error", category: "structure",
+    test: (s) => (s.lines > 800 ? { lines: s.lines } : null) },
+  { id: "body-too-long", severity: "warn", category: "structure",
+    test: (s) => (s.lines > 500 && s.lines <= 800 ? { lines: s.lines } : null) },
+  { id: "body-no-structure", severity: "info", category: "structure",
+    test: (s) => (s.lines > 60 && !/^##\s/m.test(s.body) ? {} : null) },
 
   // referanslar
-  { id: "ref-broken-link", severity: "error", category: "referans",
-    test: (s) => { const b = s.refs.filter((r) => !r.exists && !r.isExample && r.kind !== "code"); return b.length ? b.map((r) => r.raw).join(", ") : null; },
-    why: "Skill okunmasını istediği dosyayı bulamaz; adım sessizce atlanır.", fix: "Yolu düzelt ya da dosyayı ekle." },
-  { id: "ref-broken-code", severity: "warn", category: "referans",
-    test: (s) => { const b = s.refs.filter((r) => !r.exists && !r.isExample && r.kind === "code"); return b.length ? b.map((r) => r.raw).join(", ") : null; },
-    why: "Ters tırnak içindeki yol örnek de olabilir, gerçek atıf da; ikincisiyse kırık.", fix: "Örnekse metni \"örn.\" ile işaretle, atıfsa dosyayı ekle." },
-  { id: "ref-cross-skill", severity: "info", category: "referans",
-    test: (s) => { const c = s.refs.filter((r) => r.cross); return c.length ? c.map((r) => r.raw).join(", ") : null; },
-    why: "Başka bir skill'in dosyasına dayanıyor; o skill kurulu değilse referans kopar.", fix: "Dosyayı kendi `references/` dizinine kopyala ya da bağımlılığı açıklamada söyle." },
-  { id: "plugin-root-missing", severity: "warn", category: "referans",
+  { id: "ref-broken-link", severity: "error", category: "reference",
+    test: (s) => { const b = s.refs.filter((r) => !r.exists && !r.isExample && r.kind !== "code"); return b.length ? { refs: b.map((r) => r.raw).join(", ") } : null; } },
+  { id: "ref-broken-code", severity: "warn", category: "reference",
+    test: (s) => { const b = s.refs.filter((r) => !r.exists && !r.isExample && r.kind === "code"); return b.length ? { refs: b.map((r) => r.raw).join(", ") } : null; } },
+  { id: "ref-cross-skill", severity: "info", category: "reference",
+    test: (s) => { const c = s.refs.filter((r) => r.cross); return c.length ? { refs: c.map((r) => r.raw).join(", ") } : null; } },
+  { id: "plugin-root-missing", severity: "warn", category: "reference",
     test: (s) => {
       if (!s.pluginRoot) return null;
       const bare = s.refs.filter((r) => /^(?:scripts|assets)\//.test(r.raw) && !r.raw.includes("CLAUDE_PLUGIN_ROOT"));
-      return bare.length ? bare.map((r) => r.raw).join(", ") : null;
-    },
-    why: "Plugin içindeki script'e göreli yolla çağrı, çalışma dizini farklıysa kırılır.", fix: "`${CLAUDE_PLUGIN_ROOT}/scripts/…` kullan." },
-  { id: "plugin-root-orphan", severity: "warn", category: "referans",
-    test: (s) => (!s.pluginRoot && /\$\{CLAUDE_PLUGIN_ROOT\}/.test(s.body) ? "plugin dışında `${CLAUDE_PLUGIN_ROOT}` kullanılıyor" : null),
-    why: "Bu değişken yalnızca plugin olarak kurulmuş skill'lerde tanımlıdır.", fix: "Skill'i bir plugin'e taşı ya da göreli yol kullan." },
+      return bare.length ? { refs: bare.map((r) => r.raw).join(", ") } : null;
+    } },
+  { id: "plugin-root-orphan", severity: "warn", category: "reference",
+    test: (s) => (!s.pluginRoot && /\$\{CLAUDE_PLUGIN_ROOT\}/.test(s.body) ? {} : null) },
 
   // taşınabilirlik ve güvenlik
-  { id: "path-absolute", severity: "warn", category: "tasinabilirlik",
-    test: (s) => { const m = s.body.match(ABS_PATH_RE); return m ? m[0] : null; },
-    why: "Mutlak kullanıcı yolu başka bir makinede yok.", fix: "Ev dizinini çalışma anında çöz, gövdeye gömme." },
-  { id: "path-literal-tilde", severity: "error", category: "tasinabilirlik",
-    test: (s) => { const m = s.body.match(LITERAL_TILDE_RE); return m ? m[0].trim() : null; },
-    why: "Bir script'e literal `~` geçtiğinde kabuk genişletmesi olmayan yerde adı `~` olan bir klasör oluşur.", fix: "Ev dizinini skill içinde çöz ve tam yolu geçir." },
-  { id: "agent-lock-in", severity: "info", category: "tasinabilirlik",
-    test: (s) => { const m = s.body.match(AGENT_NAME_RE); return m ? m[0] : null; },
-    why: "Skill formatı ajanlar arası taşınabilir; gövdedeki ajan adı onu tek platforma bağlıyor gibi okutur.", fix: "\"coding agent\" gibi nötr bir dil kullan (gerçekten platforma özgü değilse)." },
-  { id: "tools-broad", severity: "warn", category: "izin",
+  { id: "path-absolute", severity: "warn", category: "portability",
+    test: (s) => { const m = s.body.match(ABS_PATH_RE); return m ? { match: m[0] } : null; } },
+  { id: "path-literal-tilde", severity: "error", category: "portability",
+    test: (s) => { const m = s.body.match(LITERAL_TILDE_RE); return m ? { match: m[0].trim() } : null; } },
+  { id: "agent-lock-in", severity: "info", category: "portability",
+    test: (s) => { const m = s.body.match(AGENT_NAME_RE); return m ? { match: m[0] } : null; } },
+  { id: "tools-broad", severity: "warn", category: "permission",
     test: (s) => {
       const t = s.frontmatter["allowed-tools"] || s.frontmatter.tools;
       if (!t) return null;
-      if (/(^|[\s,])\*([\s,]|$)/.test(t)) return "allowed-tools: *";
+      if (/(^|[\s,])\*([\s,]|$)/.test(t)) return {};
       return null;
-    },
-    why: "Her araca açık bir skill, izin kapılarını kendi kapsamında geniş bırakır.", fix: "Gerçekten kullandığın araçları say." },
+    } },
 
   // eval kapsamı
   { id: "eval-missing", severity: "warn", category: "eval",
-    test: (s) => (s.evalFile ? null : `evals/skill-triggers/${s.dirName}.json (ya da ${s.dirName}/case.yaml) yok`),
-    why: "Tetiklenme dosyası olmadan açıklamayı değiştirdiğinde neyi bozduğunu ölçemezsin.", fix: "should_trigger / should_not_trigger listeleriyle bir eval dosyası ekle." },
+    test: (s) => (s.evalFile ? null : { dirName: s.dirName }) },
   { id: "eval-invalid", severity: "error", category: "eval",
     test: (s) => {
       if (!s.evalFile || s.evalKind !== "json") return null; // vaka dosyaları YAML olabilir
       try { JSON.parse(readFileSync(s.evalFile, "utf8")); return null; }
-      catch (e) { return `eval dosyası okunamıyor: ${e.message.slice(0, 60)}`; }
-    },
-    why: "Bozuk eval dosyası sessizce atlanır.", fix: "JSON'u düzelt." },
+      catch (e) { return { message: e.message.slice(0, 60) }; }
+    } },
   { id: "eval-thin", severity: "info", category: "eval",
     test: (s) => {
       if (!s.evalFile) return null;
       if (s.evalKind === "cases") {
         // Vaka-başına-dosya düzeninde negatif örnek kavramı yok; yalnızca sayıya bakılır.
-        return (s.evalCases || 0) >= 4 ? null : `vaka dosyası: ${s.evalCases || 0}`;
+        return (s.evalCases || 0) >= 4 ? null : { cases: s.evalCases || 0 };
       }
       let j; try { j = JSON.parse(readFileSync(s.evalFile, "utf8")); } catch { return null; }
       const yes = (j.should_trigger || []).length, no = (j.should_not_trigger || []).length;
       if (yes >= 4 && no >= 3) return null;
-      return `should_trigger: ${yes}, should_not_trigger: ${no}`;
-    },
-    why: "Az sayıda örnek, açıklama değişikliğinin etkisini yakalamaz; negatif örnek yoksa çakışma hiç ölçülmez.", fix: "En az 4 pozitif ve 3 negatif örnek yaz; negatifler komşu skill'lerin isteklerinden seçilsin." },
+      return { yes, no };
+    } },
 ];
-
+/**
+ * Bulgular makine verisidir: `check`, `severity`, `category` ve `vars`.
+ * Düzyazı `i18n.mjs`'te, raporlama anında uygulanır — `renderFindings()`.
+ */
 export function lintSkill(skill, { ignore = [] } = {}) {
   const out = [];
   for (const c of CHECKS) {
     if (ignore.includes(c.id)) continue;
     // Kurulmamış katalog girdilerinde dosya varlığı denetimi yanlış alarm üretir.
-    if (!skill.installed && c.category === "referans") continue;
+    if (!skill.installed && c.category === "reference") continue;
     if (!skill.installed && c.category === "eval") continue;
     let hit;
     try { hit = c.test(skill); } catch { hit = null; }
-    if (!hit) continue;
+    if (!hit) continue;   // null = tetiklenmedi; `{}` değeri de geçerli bir bulgudur
     out.push({
       check: c.id, severity: c.severity, category: c.category,
       skill: skill.id, agent: skill.agent, file: skill.file,
-      detail: String(hit).slice(0, 200), why: c.why, fix: c.fix,
+      vars: hit,
     });
   }
   return out;
 }
 
+/**
+ * Puan. `level` anahtarı dilden bağımsızdır (`poor`/`fair`/`good`/`clean`);
+ * görünen etiket `i18n.mjs`'teki `levelLabel()` ile üretilir. CI eşiği buna
+ * bağlanabilsin diye çeviriyle değişmez.
+ */
 export function lintScore(findings) {
   const raw = findings.reduce((n, f) => n + (SEV_WEIGHT[f.severity] || 0), 0);
-  return { raw, level: raw >= 40 ? "kotu" : raw >= 15 ? "orta" : raw > 0 ? "iyi" : "temiz" };
+  return { raw, level: raw >= 40 ? "poor" : raw >= 15 ? "fair" : raw > 0 ? "good" : "clean" };
 }
 
 // ---------- çakışma analizi ----------
@@ -310,5 +293,39 @@ export function selftest() {
   if (drift.length !== 1 || drift[0].name !== "x") fails.push("sürüklenme: farklı içerikli kopya yakalanmadı");
   if (findDrift([fake({ name: "z", agent: "a" }), fake({ name: "z", agent: "b" })]).length) fails.push("sürüklenme: aynı içerikli kopya yanlış işaretlendi");
 
-  return { total: cases.length + 4, fails };
+  // Dil kapısı: her check id'sinin katalogda karşılığı olmalı, yoksa rapor o bulguda
+  // sessizce düzyazısız kalır. Çeviri eksiği testte patlasın, kullanıcıda değil.
+  const ids = CHECKS.map((c) => c.id);
+  const eksik = ids.filter((id) => !MESSAGE_KEYS.includes(id));
+  if (eksik.length) fails.push(`dil: katalogda karşılığı yok — ${eksik.join(", ")}`);
+  const fazla = MESSAGE_KEYS.filter((id) => !ids.includes(id));
+  if (fazla.length) fails.push(`dil: katalogda fazladan id — ${fazla.join(", ")}`);
+
+  // Kategori anahtarları nötr olmalı; `lintSkill` bunlara göre filtreliyor.
+  const gecerliKategori = new Set(Object.keys(CATEGORY_LABEL));
+  const kotuKategori = [...new Set(CHECKS.map((c) => c.category))].filter((k) => !gecerliKategori.has(k));
+  if (kotuKategori.length) fails.push(`dil: bilinmeyen kategori — ${kotuKategori.join(", ")}`);
+
+  // Her mesaj iki dilde de dolu ve gerçekten farklı olmalı.
+  const ornekVars = { name: "a", dirName: "b", length: 10, head: "h", keys: "k", lines: 900, refs: "r", match: "m", message: "e", yes: 1, no: 0 };
+  for (const id of ids) {
+    for (const L of ["en", "tr"]) {
+      const r = renderFinding({ check: id, vars: ornekVars }, L);
+      if (!r.why || !r.fix || !r.detail) { fails.push(`dil: ${id} (${L}) düzyazısı eksik`); break; }
+    }
+    const en = renderFinding({ check: id, vars: ornekVars }, "en");
+    const trr = renderFinding({ check: id, vars: ornekVars }, "tr");
+    if (en.why === trr.why) fails.push(`dil: ${id} çevrilmemiş (why iki dilde aynı)`);
+  }
+
+  // Puan seviyesi dilden bağımsız anahtar döndürmeli.
+  if (!["poor", "fair", "good", "clean"].includes(lintScore([{ severity: "error" }]).level)) {
+    fails.push("puan: seviye nötr anahtar değil");
+  }
+  // Bilinmeyen dil İngilizceye düşmeli.
+  if (renderFinding({ check: "body-too-long", vars: { lines: 600 } }, "de").detail !== "600 lines") {
+    fails.push("dil: bilinmeyen dil İngilizceye düşmüyor");
+  }
+
+  return { total: cases.length + 4 + 6, fails };
 }
