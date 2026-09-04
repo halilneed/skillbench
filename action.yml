@@ -1,0 +1,168 @@
+# skillbench — yeniden kullanılabilir GitHub Action
+#
+# Karar defteri madde 2: ücretsiz katman "terminal raporu + GitHub Action". Terminal
+# raporu vardı, Action yoktu — kullanıcı YAML'ı elle yazmak zorundaydı.
+#
+# Tasarım notları:
+#   - Composite action: ek bir Docker imajı yok, runner'ın Node'u yeterli. Aracın
+#     bağımlılığı olmadığı için `npm install` adımı da yok.
+#   - Aracı `${{ github.action_path }}` üzerinden çağırır, kullanıcının deposundan değil.
+#   - `fail-on` eşiği **önem düzeyine** bakar, puana değil; puan ayrı (`max-score`).
+#     İkisi birbirinden bağımsız: bir tek `error` bulgusu düşük puanla da gelebilir.
+#   - Bulgular iş özetine (`$GITHUB_STEP_SUMMARY`) yazılır, log'a gömülü kalmaz.
+
+name: skillbench
+description: Lint agent skills — frontmatter, activation triggers, references, permissions and eval coverage.
+author: hailneed
+
+branding:
+  icon: check-square
+  color: purple
+
+inputs:
+  path:
+    description: Directory to lint. Defaults to the repository root.
+    required: false
+    default: "."
+  fail-on:
+    description: Lowest severity that fails the job — error, warn, info, or never.
+    required: false
+    default: error
+  max-score:
+    description: Fail if score.raw exceeds this. Empty means no score threshold.
+    required: false
+    default: ""
+  ignore:
+    description: Comma-separated check ids to silence, e.g. "eval-missing,agent-lock-in".
+    required: false
+    default: ""
+  lang:
+    description: Report language for the human-readable prose — en or tr.
+    required: false
+    default: en
+  summary:
+    description: Write the findings table to the job summary.
+    required: false
+    default: "true"
+
+outputs:
+  score:
+    description: Weighted score (score.raw).
+    value: ${{ steps.lint.outputs.score }}
+  level:
+    description: One of poor, fair, good, clean.
+    value: ${{ steps.lint.outputs.level }}
+  findings:
+    description: Total number of findings.
+    value: ${{ steps.lint.outputs.findings }}
+  errors:
+    description: Number of error-severity findings.
+    value: ${{ steps.lint.outputs.errors }}
+  json:
+    description: Path to the full JSON report.
+    value: ${{ steps.lint.outputs.json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run skillbench
+      id: lint
+      shell: bash
+      env:
+        SB_PATH: ${{ inputs.path }}
+        SB_FAIL_ON: ${{ inputs.fail-on }}
+        SB_MAX_SCORE: ${{ inputs.max-score }}
+        SB_IGNORE: ${{ inputs.ignore }}
+        SB_LANG: ${{ inputs.lang }}
+        SB_SUMMARY: ${{ inputs.summary }}
+        SB_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+
+        report="$RUNNER_TEMP/skillbench.json"
+        args=(--lint --path "$SB_PATH" --lang "$SB_LANG" --out "$report")
+        if [ -n "$SB_IGNORE" ]; then args+=(--ignore "$SB_IGNORE"); fi
+
+        # Aracın kendi çıkış kodu bulguya değil, çalışıp çalışmadığına bakar.
+        # Eşik kararını aşağıdaki node adımı verir.
+        node "$SB_ACTION_PATH/scripts/skillbench.mjs" "${args[@]}"
+
+        export REPORT="$report"
+        node -e '
+          const fs = require("fs");
+          const path = require("path");
+          const report = process.env.REPORT;
+          const j = JSON.parse(fs.readFileSync(report, "utf8"));
+
+          // Annotation yolu **depo-göreli** olmalı; mutlak yolla GitHub bulguyu
+          // hiçbir satıra iliştirmez, uyarı sessizce kaybolur.
+          const root = process.env.GITHUB_WORKSPACE || process.cwd();
+          const rel = (p) => {
+            if (!p) return "SKILL.md";
+            const r = path.relative(root, p);
+            if (!r || r.startsWith("..") || path.isAbsolute(r)) return p;
+            return r.split(path.sep).join("/");
+          };
+
+          const findings = j.findings || [];
+          const order = { error: 3, warn: 2, info: 1 };
+          const count = (s) => findings.filter((f) => f.severity === s).length;
+          const errors = count("error");
+
+          const out = (k, v) => fs.appendFileSync(process.env.GITHUB_OUTPUT, k + "=" + v + "\n");
+          out("score", j.score.raw);
+          out("level", j.score.level);
+          out("findings", findings.length);
+          out("errors", errors);
+          out("json", report);
+
+          if (process.env.SB_SUMMARY === "true" && process.env.GITHUB_STEP_SUMMARY) {
+            const rows = (j.byCheck || []).map(
+              (c) => "| " + c.severity + " | `" + c.check + "` | " + c.category + " | " + c.n + " | " + (c.why || "") + " |",
+            );
+            const md = [
+              "## skillbench",
+              "",
+              "**" + (j.source.skills ?? "?") + (j.source.skills === 1 ? " skill" : " skills") + "** · score **" + j.score.raw + "** (" + j.score.level + ") · " +
+                errors + " error · " + count("warn") + " warn · " + count("info") + " info",
+              "",
+              ...(rows.length
+                ? ["| Sev | Check | Category | n | Why it matters |", "|---|---|---|---|---|", ...rows]
+                : ["No findings."]),
+              "",
+            ].join("\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          }
+
+          // Eşikler. `never` hiçbir bulguda kırmaz; puan eşiği ayrı değerlendirilir.
+          const failOn = String(process.env.SB_FAIL_ON || "error").toLowerCase();
+          const reasons = [];
+          if (failOn !== "never") {
+            const floor = order[failOn];
+            if (!floor) {
+              console.error("fail-on must be one of: error, warn, info, never (got: " + failOn + ")");
+              process.exit(2);
+            }
+            const hit = findings.filter((f) => (order[f.severity] || 0) >= floor);
+            if (hit.length) reasons.push(hit.length + " finding(s) at or above severity " + failOn);
+          }
+          const max = process.env.SB_MAX_SCORE;
+          if (max !== undefined && max !== "") {
+            const limit = Number(max);
+            if (!Number.isFinite(limit)) {
+              console.error("max-score must be a number (got: " + max + ")");
+              process.exit(2);
+            }
+            if (j.score.raw > limit) reasons.push("score " + j.score.raw + " exceeds max-score " + limit);
+          }
+
+          if (reasons.length) {
+            for (const r of reasons) console.error("skillbench: " + r);
+            for (const f of findings.filter((x) => x.severity === "error").slice(0, 20)) {
+              // Annotation: GitHub bunu dosya satırında gösterir.
+              console.log("::error file=" + rel(f.file) + "::" + f.check + " — " + (f.detail || ""));
+            }
+            process.exit(1);
+          }
+          console.log("skillbench: score " + j.score.raw + " (" + j.score.level + "), " + findings.length + " finding(s), threshold met");
+        '

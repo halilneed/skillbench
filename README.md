@@ -130,6 +130,39 @@ ignored, so you never measure a different scope than you meant to.
 
 ## In CI
 
+There is a GitHub Action, so you do not have to write the plumbing:
+
+```yaml
+- uses: hailneed/skillbench@main
+  with:
+    path: skills          # default: the repository root
+    fail-on: error        # error | warn | info | never
+```
+
+Error findings appear as **inline annotations** on the offending `SKILL.md`, and the full
+findings table is written to the job summary.
+
+| Input | Default | What it does |
+|---|---|---|
+| `path` | `.` | directory to lint |
+| `fail-on` | `error` | lowest severity that fails the job; `never` reports without failing |
+| `max-score` | *(none)* | fail if `score.raw` exceeds this — independent of `fail-on` |
+| `ignore` | *(none)* | comma-separated check ids to silence |
+| `lang` | `en` | language of the human-readable prose |
+| `summary` | `true` | write the findings table to the job summary |
+
+Outputs: `score` · `level` · `findings` · `errors` · `json` (path to the full report).
+
+```yaml
+- uses: hailneed/skillbench@main
+  id: lint
+  with:
+    fail-on: never        # report, do not block
+- run: echo "score ${{ steps.lint.outputs.score }} (${{ steps.lint.outputs.level }})"
+```
+
+### Or wire it yourself
+
 The JSON output is **language-neutral**: `check`, `severity`, `category`, `vars` and
 `score.level` are identical whatever `--lang` you pass. Only `detail`, `why` and `fix` are
 localised, so a threshold never breaks on a translation.

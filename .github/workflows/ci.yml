@@ -102,6 +102,7 @@ jobs:
       - name: Default output carries no Turkish
         run: |
           node scripts/skillbench.mjs --lint --path evals/fixture-skills --md > out.md
+
           node -e '
             const fs = require("fs");
             const bad = fs.readFileSync("out.md", "utf8")
@@ -114,3 +115,59 @@ jobs:
             }
             console.log("default output is English-only");
           '
+
+  # Action'ın kendisi de test edilir. Yayınlanmış ama hiç çalıştırılmamış bir
+  # composite action, "var" demekten öte bir şey ifade etmez.
+  action:
+    runs-on: ubuntu-latest
+    name: action
+    steps:
+      - uses: actions/checkout@v5
+
+      # Bozuk fixture üzerinde eşik kapalı: Action çalışıyor mu, çıktı veriyor mu?
+      - name: Action runs and reports
+        id: soft
+        uses: ./
+        with:
+          path: evals/fixture-skills
+          fail-on: never
+
+      - name: Outputs are populated
+        env:
+          SCORE: ${{ steps.soft.outputs.score }}
+          LEVEL: ${{ steps.soft.outputs.level }}
+          FINDINGS: ${{ steps.soft.outputs.findings }}
+          ERRORS: ${{ steps.soft.outputs.errors }}
+          JSON: ${{ steps.soft.outputs.json }}
+        run: |
+          echo "score=$SCORE level=$LEVEL findings=$FINDINGS errors=$ERRORS"
+          test -n "$SCORE" || { echo "score output empty"; exit 1; }
+          test "$LEVEL" = "poor" || { echo "expected level poor on the broken fixture, got: $LEVEL"; exit 1; }
+          test "$ERRORS" -ge 1 || { echo "expected at least one error finding"; exit 1; }
+          test -f "$JSON" || { echo "json output does not point at a file"; exit 1; }
+
+      # Eşik açıkken aynı fixture'da Action **kırmalı**. `continue-on-error` ile
+      # sonucu okuyup tersini doğruluyoruz: kırmazsa kapı işe yaramıyor demektir.
+      - name: Action fails the job when it should
+        id: hard
+        continue-on-error: true
+        uses: ./
+        with:
+          path: evals/fixture-skills
+          fail-on: error
+
+      - name: That failure was required
+        run: |
+          echo "outcome: ${{ steps.hard.outcome }}"
+          test "${{ steps.hard.outcome }}" = "failure" || {
+            echo "the broken fixture has error findings, but fail-on: error did not fail the step"
+            exit 1
+          }
+          echo "gate works"
+
+      # Temiz hedefte kırmamalı: aracın kendi skills/ dizini.
+      - name: Action passes on the repo's own skills
+        uses: ./
+        with:
+          path: skills
+          fail-on: error
