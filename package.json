@@ -31,15 +31,15 @@
   ],
   "author": {
     "name": "Halil Ataş",
-    "url": "https://github.com/hailneed"
+    "url": "https://github.com/halilneed"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hailneed/skillbench.git"
+    "url": "git+https://github.com/halilneed/skillbench.git"
   },
-  "homepage": "https://hailneed.github.io/skillbench/",
+  "homepage": "https://halilneed.github.io/skillbench/",
   "bugs": {
-    "url": "https://github.com/hailneed/skillbench/issues"
+    "url": "https://github.com/halilneed/skillbench/issues"
   },
   "license": "MIT"
 }

@@ -1,6 +1,6 @@
 # skillbench
 
-[![CI](https://github.com/hailneed/skillbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hailneed/skillbench/actions/workflows/ci.yml)
+[![CI](https://github.com/halilneed/skillbench/actions/workflows/ci.yml/badge.svg)](https://github.com/halilneed/skillbench/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](#requirements)
 
@@ -10,7 +10,7 @@
 >
 > No network calls. No API key. No quota.
 
-**Site:** https://hailneed.github.io/skillbench/ · *Türkçe açıklama aşağıda.*
+**Site:** https://halilneed.github.io/skillbench/ · *Türkçe açıklama aşağıda.*
 
 A skill that quietly never opens is more common than a skill that is broken — and far
 harder to notice. `skillbench` does not guess at this: it reads the activation record out
@@ -19,7 +19,7 @@ of your session history.
 ## What it looks like
 
 ```
-$ npx --yes github:hailneed/skillbench --lint --md
+$ npx --yes github:halilneed/skillbench --lint --md
 ```
 
 ```markdown
@@ -100,7 +100,7 @@ misses those skills entirely.
 
 ```
 # Inside Claude Code, once:
-/plugin marketplace add hailneed/plugins
+/plugin marketplace add halilneed/plugins
 /plugin install skillbench@hailneed
 ```
 
@@ -117,7 +117,7 @@ Claude Code + Node.js 18+. No dependencies, no API key.
 ## Without the plugin
 
 ```
-git clone https://github.com/hailneed/skillbench
+git clone https://github.com/halilneed/skillbench
 cd skillbench
 
 node scripts/skillbench.mjs --list --md                  # skills that were found
@@ -138,7 +138,7 @@ ignored, so you never measure a different scope than you meant to.
 There is a GitHub Action, so you do not have to write the plumbing:
 
 ```yaml
-- uses: hailneed/skillbench@main
+- uses: halilneed/skillbench@main
   with:
     path: skills          # default: the repository root
     fail-on: error        # error | warn | info | never
@@ -159,7 +159,7 @@ findings table is written to the job summary.
 Outputs: `score` · `level` · `findings` · `errors` · `json` (path to the full report).
 
 ```yaml
-- uses: hailneed/skillbench@main
+- uses: halilneed/skillbench@main
   id: lint
   with:
     fail-on: never        # report, do not block
@@ -216,10 +216,10 @@ localised, so a threshold never breaks on a translation.
 - **Skillbench Cloud (paid, optional):** continuous measurement for a team skill library,
   regression history showing what a description change did to triggering, and a
   pre-publish gate for marketplace authors. The plugin stays free.
-  Waitlist: https://hailneed.github.io/skillbench/#cloud
+  Waitlist: https://halilneed.github.io/skillbench/#cloud
 
 This repo is part of the `agentlens` family: the adapter layer is shared with
-[`agent-blackbox`](https://github.com/hailneed/agent-blackbox), where the canonical copy lives.
+[`agent-blackbox`](https://github.com/halilneed/agent-blackbox), where the canonical copy lives.
 
 ## License
 
@@ -257,6 +257,6 @@ node scripts/skillbench.mjs --coverage --md --lang tr
 ```
 
 ```
-/plugin marketplace add hailneed/plugins
+/plugin marketplace add halilneed/plugins
 /plugin install skillbench@hailneed
 ```

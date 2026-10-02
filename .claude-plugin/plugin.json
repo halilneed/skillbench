@@ -5,9 +5,9 @@
   "description": "Lint and real-usage evidence for coding-agent skills. Checks frontmatter, activation quality, structure, references, portability and eval coverage across Claude Code, Codex CLI and Gemini CLI; counts which skills actually fired in real sessions; and finds skills that compete for the same request. No network calls, no quota spent.",
   "author": {
     "name": "Halil Ataş",
-    "url": "https://github.com/hailneed"
+    "url": "https://github.com/halilneed"
   },
-  "repository": "https://github.com/hailneed/skillbench",
+  "repository": "https://github.com/halilneed/skillbench",
   "license": "MIT",
   "keywords": ["skills", "lint", "agent-skills", "plugin-development", "claude-code", "codex", "gemini-cli", "activation", "local-first"]
 }
